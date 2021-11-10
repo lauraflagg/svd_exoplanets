@@ -259,7 +259,20 @@ class Instrument:
                     else:
                         tempxxx=1
         elif self.name=='HARPS':
-            x= None
+            for i,item in enumerate(all_fns):
+                #print(i,item)
+    
+    
+    
+                with fits.open('../data/'+date+'/'+item) as f:
+                    dtemp=f[0].data
+                    hdr=f[0].header
+                    wlfile=hdr['HIERARCH ESO DRS CAL TH FILE']
+                    with fits.open('../data/'+date+'/'+wlfile) as f2:
+                        wl[i]=f2[0].data
+                    
+            
+            
         
         elif self.name=='Carmenes' or self.name=='CARMENES':
             for i,item in enumerate(all_fns):
@@ -368,7 +381,7 @@ class Instrument:
        
 
 
-def doPCA(d_byorder,comps=4,wlshift=False):
+def doPCA(d_byorder,comps=4,wlshift=False,sigcut=3.):
     data_arr_A=np.zeros_like(d_byorder)
     data_arr1_A=data_arr_A.copy()
     #data_arr=np.zeros(data.shape)
@@ -401,9 +414,9 @@ def doPCA(d_byorder,comps=4,wlshift=False):
             #'''
             sig=np.std(A)
             med=np.median(A)
-            loc=np.where(A > 3.*sig+med)
+            loc=np.where(A > sigcut*sig+med)
             A[loc]=0#*0.+20*sig
-            loc=np.where(A < -3.*sig+med)
+            loc=np.where(A < -sigcut*sig+med)
             A[loc]=0#*0.+20*sig
             #'''
             #
@@ -415,7 +428,7 @@ def doPCA(d_byorder,comps=4,wlshift=False):
 
 # In[9]:
 
-def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=10,templatefn='',vsysshift=-10.,scale=1,wv=True):
+def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=10,templatefn='',vsysshift=-10.,scale=1,wv=True,sigcut=3.):
 
     sim=False
     if templatefn!='':
@@ -507,7 +520,7 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
 
         for i in range(iters):
 
-            data_byorder=doPCA(data_byorder,comps, wlshift=wlshift)
+            data_byorder=doPCA(data_byorder,comps, wlshift=wlshift,sigcut=sigcut)
 
         data_arr=data_byorder    
 
@@ -649,7 +662,7 @@ def print_section(wls,sec,secname,data_tog_final,mjd_tog,dates_used,filecode,sav
 
 # In[ ]:
 
-def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','20160225','20160226','20160324'],iters=1,comps=4,comps2=0,do_new=True,wlshift=False,templatefn='',savecsv=False,plot=True,wv=True,sncut=570000.,dvcut=10.,savecode='',vsysshift=-10.,scale=1,normtwice=False,subtwice=False):
+def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','20160225','20160226','20160324'],iters=1,comps=4,comps2=0,do_new=True,wlshift=False,templatefn='',savecsv=False,plot=True,wv=True,sncut=570000.,dvcut=10.,savecode='',vsysshift=-10.,scale=1,normtwice=False,subtwice=False,sigcut=3.):
     mdl = importlib.import_module(target+'_pars')
     
     # is there an __all__?  if so respect it
@@ -694,8 +707,14 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
         else:
             fss=''
             
-        filecode='../data/PCA_'+target+'_'+fss+'iters'+str(iters)+'_comps'+str(comps)+'_sncut'+str(int(sncut))+'_dvcut'+str(int(dvcut))+savecode+templatefn+vsstr+wbv+n2+s2+c2
-    #    
+        if sigcut!=3:
+            scc='sigcut'+str(sigcut)
+        else:
+            scc=''
+        
+            
+        filecode='../data/PCA_'+target+'_'+fss+'iters'+str(iters)+'_comps'+str(comps)+'_sncut'+str(int(sncut))+'_dvcut'+str(int(dvcut))+savecode+templatefn+vsstr+wbv+n2+s2+c2+scc
+        print(filecode)
     
     inst=Instrument(instname)
     inst.wls=astro_lf.createwlscale(inst.disp,inst.wl_low,inst.wl_high)
@@ -756,14 +775,14 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
     
     if normtwice:
         intransit_arr=np.array([intransit(item) for item in mjd_tog])
-        med_spec=np.zeros_like(wls)
+        med_spec=np.zeros_like(inst.wls)
         med_spec[:]=np.median(data_tog_final[~intransit_arr,:],axis=0)
 
         data_tog_final=(data_tog_final+1)/(med_spec+1)-1
     
     if subtwice:
         intransit_arr=np.array([intransit(item) for item in mjd_tog])
-        med_spec=np.zeros_like(wls)
+        med_spec=np.zeros_like(inst.wls)
         med_spec[:]=np.median(data_tog_final[~intransit_arr,:],axis=0)
 
         data_tog_final=(data_tog_final)-(med_spec)-1    
