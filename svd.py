@@ -66,6 +66,8 @@ class Instrument:
             rightedgecut=0
             orderstoplotinphase=[15,11,6,3]
             orderstoplotasresids=[11]
+            wlunit='AA'
+            wl_air_or_vac='air'
         if name[0:6]=='IGRINS':
             totalorders=53
             wl_low=1.42
@@ -87,6 +89,8 @@ class Instrument:
                 long=-104.0248
                 height=2076  
             name='IGRINS'
+            wlunit='microns'
+            wl_air_or_vac='vac'
         if name=='CARMENES' or name=='Carmenes' or name=='carmenes':
             name='CARMENES'
             totalorders=61
@@ -102,6 +106,8 @@ class Instrument:
             rightedgecut=0
             orderstoplotinphase=[25,36,38,47]
             orderstoplotasresids=[38]
+            wl_air_or_vac='vac'
+            wlunit='AA'
         
         self.totalorders=totalorders
         self.npix=npix
@@ -116,6 +122,8 @@ class Instrument:
         self.orderstoplotinphase=orderstoplotinphase
         self.orderstoplotasresids=orderstoplotasresids
         self.teles = EarthLocation.from_geodetic(lat=self.lat*u.deg, lon=self.long*u.deg, height=self.height*u.m)
+        self.wlunit=wlunit
+        self.wl_air_or_vac=wl_air_or_vac
         
     def getvbary(self,mjd,ra,dec):
         #barycorrection
@@ -577,17 +585,23 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
         data_1d=np.zeros((len(all_fns),len(inst.wls)))
         uncs_1d=np.zeros((len(all_fns),len(inst.wls)))
         print(data_1d.shape)
-        #dif=np.abs(wls-7600.038239319068)
-        #loc=np.where(dif==np.min(dif))
+
+        #want to interpolate onto evenly spaced scale in vacuum wavelengths
+        #if the instrument outputs in vacuum then we can do this directly
+        #if not, we need to convert the desired wls to air.  When we interpolate
+        #onto that, we can then substitue in the vacuum wavelengths
+        if inst.wl_air_or_vac=='vac':
+            wlstouse=inst.wls
+        elif inst.wl_air_or_vac=='air':
+            wlstouse=vactoair2(inst.wls)
               
         for o,o_data in enumerate(arrused):
             #print(o_data.shape,wlused[o].shape)
-            o_data_1,u1d=spectres.spectres(inst.wls,wlused[o],o_data.transpose(),spec_errs=uncs_byorder[o].transpose(),fill=0,verbose=False)
+            o_data_1,u1d=spectres.spectres(wlstouse,wlused[o],o_data.transpose(),spec_errs=uncs_byorder[o].transpose(),fill=0,verbose=False)
 
-
-
+            #uncertainties and weighting the edges
             wo1=uncs_1d
-            wo2=np.nan_to_num(1./wo1**2,neginf=0,posinf=0)
+            wo2=np.nan_to_num(1./wo1**2,neginf=0,posinf=0) #set the wieght of anything that doesn't have a good weight to 0
             wn1=u1d
             wn2=np.nan_to_num(1./wn1**2,neginf=0,posinf=0)
             wsum=wo2+wn2
@@ -633,12 +647,15 @@ def conc_data(date_list,returns):
 
 
     return data_tog,mjd_tog
-def print_section(wls,sec,secname,data_tog_final,mjd_tog,dates_used,filecode,savecsv=False):
+def print_section(inst,sec,secname,data_tog_final,mjd_tog,dates_used,filecode,savecsv=False):
 
 
     num=len(mjd_tog)
-    toprint=np.zeros((num+1,len(wls[sec])))
-    toprint[0]=wls[sec]/1e4 #to convert to microns
+    toprint=np.zeros((num+1,len(inst.wls[sec])))
+    if inst.wlunit=='AA':
+        toprint[0]=inst.wls[sec]/1e4 #to convert to microns
+    elif inst.wlunit=='microns':
+        toprint[0]=inst.wls[sec]
     for i in range(num):
         toprint[i+1]=data_tog_final[i][sec]
     d=['wavelength_(microns)']
@@ -646,7 +663,7 @@ def print_section(wls,sec,secname,data_tog_final,mjd_tog,dates_used,filecode,sav
 
 
     fn=filecode+'_tog_'+secname+'.csv'
-
+    print(fn[:-3]+'pic')
     
     if savecsv:
         backupandwrite(fn,d,np.transpose(toprint))
@@ -790,7 +807,7 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
 
 
     #print_section(wls=wls,sec=COwls,secname='CO',data_tog_final=data_tog_final,mjd_tog=mjd_tog,dates_used=dates_used,filecode=filecode)
-    print_section(wls=inst.wls,sec=allwls,secname='all',data_tog_final=data_tog_final,mjd_tog=mjd_tog,dates_used=dates_used,filecode=filecode,savecsv=savecsv)
+    print_section(inst=inst,sec=allwls,secname='all',data_tog_final=data_tog_final,mjd_tog=mjd_tog,dates_used=dates_used,filecode=filecode,savecsv=savecsv)
 #   print_section(wls=wls,sec=hawls,secname='ha',data_tog_final=data_tog_final,mjd_tog=mjd_tog,dates_used=dates_used,filecode=filecode,savecsv=savecsv)
     #print_section(wls=wls,sec=hwls,secname='H',data_tog_final=data_tog_final,mjd_tog=mjd_tog,dates_used=dates_used,filecode=filecode)
 
