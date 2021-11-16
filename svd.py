@@ -445,6 +445,7 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
     
     print(date, 'iters:',iters,' components:',comps)
     folds=os.listdir('../data/reduced/'+date)
+    folds.sort()
 
     fns,ts,minszs=inst.getheaderinfo(folds=folds,sncut=sncut,date=date)
 
@@ -458,7 +459,7 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
     print('starts at:',np.min(ts),'ends at',np.max(ts))
     dv=(getplanetv(np.max(ts))-getplanetv(np.min(ts)))
     print('num obs used=',len(all_fns),' |  dv=',dv,'km/s')
-
+    #print(all_fns)
     vbarys=np.zeros(len(all_fns))
     if np.abs(dv)>dvcut:
 
@@ -493,11 +494,12 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
             uncs1=uncs0
 
 
-
+        #print(inst)
         data_byorder0=np.nan_to_num(data.transpose((1,2,0)))
         uncs_byorder=np.nan_to_num(uncs1.transpose((1,2,0)))
         #wl_byorder=np.nan_to_num(wl.transpose((1,2,0)))
         intransit_arr=np.array(intransit_list)
+        print(intransit_arr)
         #"blaze" correct
         if iters>0:
             data_byorder=np.zeros_like(data_byorder0)
@@ -593,7 +595,7 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
         if inst.wl_air_or_vac=='vac':
             wlstouse=inst.wls
         elif inst.wl_air_or_vac=='air':
-            wlstouse=vactoair2(inst.wls)
+            wlstouse=pyasl.vactoair2(inst.wls)
               
         for o,o_data in enumerate(arrused):
             #print(o_data.shape,wlused[o].shape)
@@ -688,7 +690,7 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
     else:
         # otherwise we import all names that don't begin with _
         names = [x for x in mdl.__dict__ if not x.startswith("_")]
-    
+    #print(names)
     # now drag them in
     globals().update({k: getattr(mdl, k) for k in names})    
     
