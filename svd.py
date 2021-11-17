@@ -68,6 +68,7 @@ class Instrument:
             orderstoplotasresids=[11]
             wlunit='AA'
             wl_air_or_vac='air'
+            printsecs=['allwls']
         if name[0:6]=='IGRINS':
             totalorders=53
             wl_low=1.42
@@ -91,6 +92,7 @@ class Instrument:
             name='IGRINS'
             wlunit='microns'
             wl_air_or_vac='vac'
+            printsecs=['kwls','hwls']
         if name=='CARMENES' or name=='Carmenes' or name=='carmenes':
             name='CARMENES'
             totalorders=61
@@ -108,6 +110,7 @@ class Instrument:
             orderstoplotasresids=[38]
             wl_air_or_vac='vac'
             wlunit='AA'
+            printsecs=['allwls']
         
         self.totalorders=totalorders
         self.npix=npix
@@ -124,6 +127,7 @@ class Instrument:
         self.teles = EarthLocation.from_geodetic(lat=self.lat*u.deg, lon=self.long*u.deg, height=self.height*u.m)
         self.wlunit=wlunit
         self.wl_air_or_vac=wl_air_or_vac
+        self.printsecs=printsecs
         
     def getvbary(self,mjd,ra,dec):
         #barycorrection
@@ -774,8 +778,11 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
 
 
     # In[ ]:
-    allwls=np.where((inst.wls>5200) & (inst.wls<10600))
-    hawls=np.where((inst.wls>6550) & (inst.wls<6580))
+    secdefs={}
+    secdefs['allwls']=np.where((inst.wls>np.min(inst.wls)) & (inst.wls<np.max(inst.wls)))
+    secdefs['kwls']=np.where((inst.wls>2.0) & (inst.wls<2.45))
+    secdefs['hwls']=np.where((inst.wls>1.4) & (inst.wls<1.8))
+    secdefs['hawls']=np.where((inst.wls>6550) & (inst.wls<6580))
 
     data_tog_final=np.zeros_like(data_tog)
     for i,spec in enumerate(data_tog):
@@ -807,11 +814,8 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
         data_tog_final=(data_tog_final)-(med_spec)-1    
     
 
-
-    #print_section(wls=wls,sec=COwls,secname='CO',data_tog_final=data_tog_final,mjd_tog=mjd_tog,dates_used=dates_used,filecode=filecode)
-    print_section(inst=inst,sec=allwls,secname='all',data_tog_final=data_tog_final,mjd_tog=mjd_tog,dates_used=dates_used,filecode=filecode,savecsv=savecsv)
-#   print_section(wls=wls,sec=hawls,secname='ha',data_tog_final=data_tog_final,mjd_tog=mjd_tog,dates_used=dates_used,filecode=filecode,savecsv=savecsv)
-    #print_section(wls=wls,sec=hwls,secname='H',data_tog_final=data_tog_final,mjd_tog=mjd_tog,dates_used=dates_used,filecode=filecode)
+    for item in inst.printsecs:
+        print_section(inst=inst,sec=item,secname=str(item),data_tog_final=data_tog_final,mjd_tog=mjd_tog,dates_used=dates_used,filecode=filecode,savecsv=savecsv)
 
 
 
