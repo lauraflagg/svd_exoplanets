@@ -16,8 +16,8 @@ sys.path.append('C:/Users/laura/programming/python/toimport')
 
 from stats_lf import xcor, chisqwithshift
 import astropy.constants
-sys.path.append('../../directdetectionprograms/')
-import astro_lf, comb_xcor_class, v_curve
+sys.path.append('../../directdetectionprograms/combine-and-xcor')
+import astro_lf, comb_xcor, v_curve
 from readwrite_lf import backupandwrite
 
 
@@ -33,7 +33,7 @@ def getphase(mjd):
 
 def getplanetv(mjd):
     pha=getphase(mjd)
-    return comb_xcor_class.stellarrvshift(mjd,par2,day0,code='sine')*s2p_massratio  
+    return comb_xcor.planetrvshift(mjd,planet_pars,day0,code='sine')
 
 def intransit(mjd): 
     pha=getphase(mjd)    
@@ -815,7 +815,7 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
     
 
     for item in inst.printsecs:
-        print_section(inst=inst,sec=item,secname=str(item),data_tog_final=data_tog_final,mjd_tog=mjd_tog,dates_used=dates_used,filecode=filecode,savecsv=savecsv)
+        print_section(inst=inst,sec=secdefs[item],secname=str(item),data_tog_final=data_tog_final,mjd_tog=mjd_tog,dates_used=dates_used,filecode=filecode,savecsv=savecsv)
 
 
 
