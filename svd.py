@@ -503,7 +503,7 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
         uncs_byorder=np.nan_to_num(uncs1.transpose((1,2,0)))
         #wl_byorder=np.nan_to_num(wl.transpose((1,2,0)))
         intransit_arr=np.array(intransit_list)
-        print(intransit_arr)
+
         #"blaze" correct
         if iters>0:
             data_byorder=np.zeros_like(data_byorder0)
