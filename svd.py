@@ -509,7 +509,10 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
             data_byorder=np.zeros_like(data_byorder0)
             for i,item in enumerate(data_byorder0):
                 item0=item.transpose()
-                item1=item0[np.where(intransit_arr==False)]
+                if transiting and intransit_arr.any(): #if transit observations, divide by out of tranitmedian ; else divide by all
+                    item1=item0[np.where(intransit_arr==False)]
+                else:
+                    item1=item0
                 med_spec=np.median(item1,axis=0)
                 #sd_spec=np.std(item1,ddof=1,axis=0)
                 #new_specs0=data_byorder0[i].transpose()/med_spec
