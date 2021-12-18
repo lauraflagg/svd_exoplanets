@@ -5,7 +5,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 from astropy.time import Time
 
-from astropy.io import fits
+from astropy.io import fits, ascii
 import os
 import spectres, argparse
 import importlib
@@ -69,6 +69,23 @@ class Instrument:
             wlunit='AA'
             wl_air_or_vac='air'
             printsecs=['allwls']
+        if name=='McD_107in_echelle':
+            totalorders=55
+            wl_low=4100.
+            wl_high=10000.
+            disp=2.15
+            lat=30.6714
+            long=-104.022
+            height=2070
+            npix=None
+            leftedgecut=0
+            
+            rightedgecut=0
+            orderstoplotinphase=[18,19,25]
+            orderstoplotasresids=[18,19]
+            wlunit='AA'
+            wl_air_or_vac='air'
+            printsecs=['allwls','hawls','hewls']
         if name[0:6]=='IGRINS':
             totalorders=53
             wl_low=1.42
@@ -161,7 +178,23 @@ class Instrument:
                     if snrs>sncut:            
                         fns.append(fn)
                         ts.append(float(tmid))  
-                        minszs.append(np.min(test[1]))   
+                        minszs.append(np.min(test[1]))  
+        elif self.name=='McD_107in_echelle':        
+            for fn in folds:
+                if fn.endswith('.ech') and fn[:3]!='wid':        
+                    with fits.open('../data/reduced/'+date+'/'+fn) as f:
+                        hdr=f[0].header
+                        test=f[1].data        
+                        tmid=Time(hdr['DATE-OBS']+'T'+hdr['UT'], format='isot', scale='utc').to_value('mjd')+float(hdr['EXPTIME'])*.5/(60*60*24)
+                        #print(tmid,float(hdr['HJDUTC'])-2400000.5 )
+                        #print(getvbary(tmid,self),hdr['HRV'])
+                        snrs=np.median(test[0][1][20]) #CHANGE WHEN SWITCHING OBJECT
+                        #print(tmid,snrs)
+        
+                    if snrs>sncut and hdr['IMAGETYP'][0:4]!='comp'and hdr['THARLAMP'][0:3]=='OFF':            
+                        fns.append(fn)
+                        ts.append(float(tmid))  
+                        minszs.append(2048)  
         elif self.name=='Carmenes' or self.name=='CARMENES':
             for fn in folds:
                 if fn.endswith('A.fits'):
@@ -283,7 +316,46 @@ class Instrument:
                     with fits.open('../data/'+date+'/'+wlfile) as f2:
                         wl[i]=f2[0].data
                     
-            
+        elif self.name=='McD_107in_echelle':
+            for i,item in enumerate(all_fns):
+                #print(i,item)
+    
+    
+                with fits.open('../data/reduced/'+date+'/'+item) as f:
+                    dtemp=f[1].data[0][0]
+                    uncs0[i]=f[1].data[0][1]
+    
+                    data[i]=dtemp
+                    wldat=ascii.read('../data/reduced/'+date+'/wls.dat')
+                    wl[i]=np.zeros_like(dtemp)
+                    for o in range(self.totalorders):
+                        wl[i,o]=wldat.columns[o].value
+                        
+                                     
+                    hdr=f[0].header
+    
+                    tmid=Time(hdr['DATE-OBS']+'T'+hdr['UT'], format='isot', scale='utc').to_value('mjd')+float(hdr['EXPTIME'])*.5/(60*60*24)
+                    time_MJD[i]=float(tmid)
+                    intransit_list.append(intransit(time_MJD[i]))
+                    
+    
+                    if sim:
+                        intran=intransit_list[i]
+                        #print(intran)                    
+                        dreturn=np.zeros_like(dtemp)
+                        if intran:
+                            vptot=-bvary[i]-getplanetv(time_MJD[i])+vsysshift
+                            
+                            nf_1, wl_1 = pyasl.dopplerShift(template['wl_(A)'].values, template['flux'].values, vptot, edgeHandling='firstlast', fillValue=None)              
+                            
+                            
+                            for o,tempwls in enumerate(f[1].data):
+                                dreturn[o]=dtemp[o]*(1-spectres.spectres(tempwls,wl_1/1e4,template['flux'].values,verbose=False)*scale)
+                        else:
+                            dreturn=dtemp
+                        data[i]=dreturn
+                    else:
+                        data[i]=dtemp            
             
         
         elif self.name=='Carmenes' or self.name=='CARMENES':
@@ -312,7 +384,8 @@ class Instrument:
                         #print(intran)                    
                         dreturn=np.zeros_like(dtemp)
                         if intran:
-                            vptot=-bvary[i]-getplanetv(time_MJD[i])+vsysshift
+                            vptot=-getvbary(time_MJD[i])-getplanetv(time_MJD[i])+vsysshift
+                            
                             
                             nf_1, wl_1 = pyasl.dopplerShift(template['wl_(A)'].values, template['flux'].values, vptot, edgeHandling='firstlast', fillValue=None)              
                             
@@ -440,7 +513,7 @@ def doPCA(d_byorder,comps=4,wlshift=False,sigcut=3.):
 
 # In[9]:
 
-def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=10,templatefn='',vsysshift=-10.,scale=1,wv=True,sigcut=3.):
+def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=10,templatefn='',vsysshift=-10.,scale=1,wv=True,sigcut=3.,initnorm=True):
 
     sim=False
     if templatefn!='':
@@ -505,14 +578,19 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
         intransit_arr=np.array(intransit_list)
 
         #"blaze" correct
-        if iters>0:
+        if iters>0 and initnorm!=False:
             data_byorder=np.zeros_like(data_byorder0)
             for i,item in enumerate(data_byorder0):
                 item0=item.transpose()
+                if inst.name[0:3]=='McD' and initnorm=='wide.ech':
+                    with fits.open('../data/reduced/'+date+'/wide.ech') as f:
+                        item1=f[1].data[0][0]                
                 if transiting and intransit_arr.any(): #if transit observations, divide by out of tranitmedian ; else divide by all
                     item1=item0[np.where(intransit_arr==False)]
                 else:
                     item1=item0
+
+
                 med_spec=np.median(item1,axis=0)
                 #sd_spec=np.std(item1,ddof=1,axis=0)
                 #new_specs0=data_byorder0[i].transpose()/med_spec
@@ -550,11 +628,11 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
             
             sbn=len(inst.orderstoplotasresids)+len(inst.orderstoplotinphase)
 
-            A=data_arr[i,]
             fig_all=plt.figure()            
             
             pn=1
             for i in inst.orderstoplotasresids:
+                A=data_arr[i,]
                 plt.subplot(sbn,1,pn)
                 for item in np.transpose(A):
                     plt.plot(wl_meds[i,],item)
@@ -564,6 +642,7 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
                 pn=pn+1
             
             for i in inst.orderstoplotinphase:
+                A=data_arr[i,]
                 plt.subplot(sbn,1,pn)
                 plt.title(date)
                 plt.imshow(np.transpose(A),extent=[wl_meds[i,].min(),wl_meds[i,].max(), phase0,phase1],aspect=aspect)
@@ -688,7 +767,7 @@ def print_section(inst,sec,secname,data_tog_final,mjd_tog,dates_used,filecode,sa
 
 # In[ ]:
 
-def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','20160225','20160226','20160324'],iters=1,comps=4,comps2=0,do_new=True,wlshift=False,templatefn='',savecsv=False,plot=True,wv=True,sncut=570000.,dvcut=10.,savecode='',vsysshift=-10.,scale=1,normtwice=False,subtwice=False,sigcut=3.):
+def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','20160225','20160226','20160324'],iters=1,comps=4,comps2=0,do_new=True,wlshift=False,templatefn='',savecsv=False,plot=True,wv=True,sncut=570000.,dvcut=10.,savecode='',vsysshift=-10.,scale=1,normtwice=False,subtwice=False,sigcut=3.,initnorm=True):
     mdl = importlib.import_module(target+'_pars')
     
     # is there an __all__?  if so respect it
@@ -704,6 +783,11 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
     
     #define file code for outpurs
     if 1==1:
+        
+        if initnorm!=True and initnorm!=False:
+            ins=intinorm
+        else:
+            ins=''
         
         if templatefn!='':
             vsstr=str(vsysshift)
@@ -739,7 +823,7 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
             scc=''
         
             
-        filecode='../data/PCA_'+target+'_'+fss+'iters'+str(iters)+'_comps'+str(comps)+'_sncut'+str(int(sncut))+'_dvcut'+str(int(dvcut))+savecode+templatefn+vsstr+wbv+n2+s2+c2+scc
+        filecode='../data/PCA_'+target+'_'+fss+'iters'+str(iters)+'_comps'+str(comps)+'_sncut'+str(int(sncut))+'_dvcut'+str(int(dvcut))+savecode+templatefn+vsstr+wbv+n2+s2+c2+scc+ins
         print(filecode)
     
     inst=Instrument(instname)
@@ -755,7 +839,7 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
 
     if do_new:
         for item in date_list:
-            temp_ret=doall(item,inst,iters=iters,comps=comps,wlshift=wlshift,plot=plot,sncut=sncut,dvcut=dvcut,templatefn=templatefn,vsysshift=vsysshift,scale=scale,wv=wv)
+            temp_ret=doall(item,inst,iters=iters,comps=comps,wlshift=wlshift,plot=plot,sncut=sncut,dvcut=dvcut,templatefn=templatefn,vsysshift=vsysshift,scale=scale,wv=wv,initnorm=initnorm)
             if temp_ret!=[]:
                 returns[item]=temp_ret
                 dates_used.append(item)
@@ -786,6 +870,7 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
     secdefs['kwls']=np.where((inst.wls>2.0) & (inst.wls<2.45))
     secdefs['hwls']=np.where((inst.wls>1.4) & (inst.wls<1.8))
     secdefs['hawls']=np.where((inst.wls>6550) & (inst.wls<6580))
+    secdefs['hewls']=np.where((inst.wls>6660) & (inst.wls<6700))
 
     data_tog_final=np.zeros_like(data_tog)
     for i,spec in enumerate(data_tog):
