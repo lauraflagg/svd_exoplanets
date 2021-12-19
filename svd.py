@@ -31,8 +31,9 @@ import astropy.units as u
 def getphase(mjd):
     return ((mjd-day0)/per) % 1.0
 
-def getplanetv(mjd):
-    pha=getphase(mjd)
+def getplanetv(mjd,e=0):
+    if e>0.03:
+        return comb_xcor.planetrvshift(mjd,planet_pars2,day0,code='vcurve')       
     return comb_xcor.planetrvshift(mjd,planet_pars,day0,code='sine')
 
 def intransit(mjd): 
@@ -237,7 +238,7 @@ class Instrument:
 
         return fns,ts,minszs
     
-    def getdata(self,date,all_fns,sim=False):
+    def getdata(self,date,all_fns,sim=False,vsysshift=0,template='',scale=1):
         data=np.zeros((len(all_fns),self.totalorders,self.sz))
         uncs0=np.zeros((len(all_fns),self.totalorders,self.sz))
         wl=np.zeros((len(all_fns),self.totalorders,self.sz))
@@ -343,16 +344,31 @@ class Instrument:
                         intran=intransit_list[i]
                         #print(intran)                    
                         dreturn=np.zeros_like(dtemp)
-                        if intran:
-                            vptot=-bvary[i]-getplanetv(time_MJD[i])+vsysshift
+                        if np.array(intransit_list).any():
+                            if intran:
+                                vptot=-getvbary(time_MJD[i])-getplanetv(time_MJD[i])+vsysshift
+                                
+                                nf_1, wl_1 = pyasl.dopplerShift(template['wl_(A)'].values, template['flux'].values, vptot, edgeHandling='firstlast', fillValue=None)              
+                                
+                                
+                                for o,tempwls in enumerate(wl):
+                                    dreturn[o]=dtemp[o]*(1-spectres.spectres(tempwls,wl_1/1e4,template['flux'].values,verbose=False)*scale)
+                            else:
+                                dreturn=dtemp
+                        else:
+                            vptot=-self.getvbary(time_MJD[i],ra=ra,dec=dec)+getplanetv(time_MJD[i],e=e)+vsysshift
+                            #print(-self.getvbary(time_MJD[i],ra=ra,dec=dec),-getplanetv(time_MJD[i],e),vptot)
                             
                             nf_1, wl_1 = pyasl.dopplerShift(template['wl_(A)'].values, template['flux'].values, vptot, edgeHandling='firstlast', fillValue=None)              
                             
+                            for o,tempwls in enumerate(wl[0]):
+                                if o==180 or o==190:
+                                    plt.plot(tempwls,dtemp[o])
+                                    plt.plot(tempwls,spectres.spectres(tempwls,wl_1,template['flux'].values,verbose=False,fill=1)*scale)
+                                    plt.xlim(6675,6685)
+                                    plt.show()
+                                dreturn[o]=dtemp[o]+spectres.spectres(tempwls,wl_1,template['flux'].values,verbose=False,fill=1)*scale                            
                             
-                            for o,tempwls in enumerate(f[1].data):
-                                dreturn[o]=dtemp[o]*(1-spectres.spectres(tempwls,wl_1/1e4,template['flux'].values,verbose=False)*scale)
-                        else:
-                            dreturn=dtemp
                         data[i]=dreturn
                     else:
                         data[i]=dtemp            
@@ -536,6 +552,8 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
     if templatefn!='':
         template=pandas.read_csv('templates/'+templatefn)
         sim=True
+    else:
+        template=''
     
     print(date, 'iters:',iters,' components:',comps)
     folds=os.listdir('../data/reduced/'+date)
@@ -557,7 +575,7 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
     vbarys=np.zeros(len(all_fns))
     if np.abs(dv)>dvcut:
 
-        wl,data,uncs0,time_MJD,intransit_list=inst.getdata(all_fns=all_fns,date=date,sim=sim)
+        wl,data,uncs0,time_MJD,intransit_list=inst.getdata(all_fns=all_fns,date=date,sim=sim,vsysshift=vsysshift,template=template,scale=scale)
         data_temp=data[:,:,:]
 
         wl_meds=np.median(wl,axis=0)      
@@ -602,7 +620,7 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
                 if inst.name[0:3]=='McD' and initnorm=='wide.ech':
                     with fits.open('../data/reduced/'+date+'/wide.ech') as f:
                         item1=f[1].data[0][0]                
-                if transiting and intransit_arr.any(): #if transit observations, divide by out of tranitmedian ; else divide by all
+                if transiting==1 and intransit_arr.any(): #if transit observations, divide by out of tranitmedian ; else divide by all
                     item1=item0[np.where(intransit_arr==False)]
                 else:
                     item1=item0
@@ -643,7 +661,9 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
             aspect=np.average(inst.wls)/15.
             #increase aspect to increase the height relative to the width
             phase0=getphase(np.min(time_MJD))
-            phase1=getphase(np.max(time_MJD))+1
+            phase1=getphase(np.max(time_MJD))
+            if phase1<phase0:
+                phase1=phase1+1
             print('phase extent',phase0,phase1)
             
             sbn=len(inst.orderstoplotasresids)+len(inst.orderstoplotinphase)
@@ -815,10 +835,14 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
             ins=''
         
         if templatefn!='':
-            vsstr=str(vsysshift)
+            vsstr='_'+str(vsysshift)
             print('template for sims=',templatefn)
+            sstr='_scale'+str(scale)
         else:
             vsstr=''
+            sstr=''
+
+            
         if wv:
             wbv='_weightedbyvariance'
         else:
@@ -848,7 +872,7 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
             scc=''
         
             
-        filecode='../data/PCA_'+target+'_'+fss+'iters'+str(iters)+'_comps'+str(comps)+'_sncut'+str(int(sncut))+'_dvcut'+str(int(dvcut))+savecode+templatefn+vsstr+wbv+n2+s2+c2+scc+ins+sos
+        filecode='../data/PCA_'+target+'_'+fss+'iters'+str(iters)+'_comps'+str(comps)+'_sncut'+str(int(sncut))+'_dvcut'+str(int(dvcut))+savecode+templatefn+vsstr+sstr+wbv+n2+s2+c2+scc+ins+sos
         print(filecode)
     
     inst=Instrument(instname)
