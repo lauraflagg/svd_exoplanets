@@ -464,9 +464,26 @@ class Instrument:
             
         return wl,data,uncs0,time_MJD,intransit_list
        
+def dosmooth(d_byorder,dates,polyorder=5):
+    data_arr_A=np.zeros_like(d_byorder)
+    #data_arr1_A=data_arr_A.copy()
+    #data_arr=np.zeros(data.shape)
+    print('smoothing with poly odrer ',str(polyorder))
+    for i,item in enumerate(d_byorder):
+        specs=item
+        new_specs=np.zeros_like(specs)
+        #print(specs.shape)
+        for w,wlbin in enumerate(specs):
+            coeffs=np.polynomial.polynomial.polyfit(dates,wlbin,polyorder)
+            new_specs[w]=wlbin-np.polynomial.polynomial.polyval(dates,coeffs)
 
+        data_arr_A[i]=new_specs          
+            
+    return data_arr_A
 
 def doPCA(d_byorder,comps=4,wlshift=False,sigcut=3.):
+    if comps==0:
+        return d_byorder
     data_arr_A=np.zeros_like(d_byorder)
     data_arr1_A=data_arr_A.copy()
     #data_arr=np.zeros(data.shape)
@@ -513,7 +530,7 @@ def doPCA(d_byorder,comps=4,wlshift=False,sigcut=3.):
 
 # In[9]:
 
-def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=10,templatefn='',vsysshift=-10.,scale=1,wv=True,sigcut=3.,initnorm=True):
+def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=10,templatefn='',vsysshift=-10.,scale=1,wv=True,sigcut=3.,initnorm=True,smooth=-1):
 
     sim=False
     if templatefn!='':
@@ -578,7 +595,7 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
         intransit_arr=np.array(intransit_list)
 
         #"blaze" correct
-        if iters>0 and initnorm!=False:
+        if (iters>0 or smooth>-1) and initnorm!=False:
             data_byorder=np.zeros_like(data_byorder0)
             for i,item in enumerate(data_byorder0):
                 item0=item.transpose()
@@ -611,7 +628,10 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
         else:
             data_byorder=data_byorder0
 #            print(np.where(avg_spec==0))
-        
+
+        if smooth>-1:
+            data_byorder=dosmooth(data_byorder,time_MJD,smooth)
+
 
         for i in range(iters):
 
@@ -767,7 +787,7 @@ def print_section(inst,sec,secname,data_tog_final,mjd_tog,dates_used,filecode,sa
 
 # In[ ]:
 
-def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','20160225','20160226','20160324'],iters=1,comps=4,comps2=0,do_new=True,wlshift=False,templatefn='',savecsv=False,plot=True,wv=True,sncut=570000.,dvcut=10.,savecode='',vsysshift=-10.,scale=1,normtwice=False,subtwice=False,sigcut=3.,initnorm=True):
+def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','20160225','20160226','20160324'],iters=1,comps=4,comps2=0,do_new=True,wlshift=False,templatefn='',savecsv=False,plot=True,wv=True,sncut=570000.,dvcut=10.,savecode='',vsysshift=-10.,scale=1,normtwice=False,subtwice=False,sigcut=3.,initnorm=True,smooth=-1):
     mdl = importlib.import_module(target+'_pars')
     
     # is there an __all__?  if so respect it
@@ -783,6 +803,11 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
     
     #define file code for outpurs
     if 1==1:
+        
+        if smooth>-1:
+            sos='_smoothorder'+str(smooth)
+        else:
+            sos=''
         
         if initnorm!=True and initnorm!=False:
             ins=intinorm
@@ -823,7 +848,7 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
             scc=''
         
             
-        filecode='../data/PCA_'+target+'_'+fss+'iters'+str(iters)+'_comps'+str(comps)+'_sncut'+str(int(sncut))+'_dvcut'+str(int(dvcut))+savecode+templatefn+vsstr+wbv+n2+s2+c2+scc+ins
+        filecode='../data/PCA_'+target+'_'+fss+'iters'+str(iters)+'_comps'+str(comps)+'_sncut'+str(int(sncut))+'_dvcut'+str(int(dvcut))+savecode+templatefn+vsstr+wbv+n2+s2+c2+scc+ins+sos
         print(filecode)
     
     inst=Instrument(instname)
@@ -839,7 +864,7 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
 
     if do_new:
         for item in date_list:
-            temp_ret=doall(item,inst,iters=iters,comps=comps,wlshift=wlshift,plot=plot,sncut=sncut,dvcut=dvcut,templatefn=templatefn,vsysshift=vsysshift,scale=scale,wv=wv,initnorm=initnorm)
+            temp_ret=doall(item,inst,iters=iters,comps=comps,wlshift=wlshift,plot=plot,sncut=sncut,dvcut=dvcut,templatefn=templatefn,vsysshift=vsysshift,scale=scale,wv=wv,initnorm=initnorm,smooth=smooth)
             if temp_ret!=[]:
                 returns[item]=temp_ret
                 dates_used.append(item)
