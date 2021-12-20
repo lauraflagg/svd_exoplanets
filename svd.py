@@ -400,7 +400,7 @@ class Instrument:
                         #print(intran)                    
                         dreturn=np.zeros_like(dtemp)
                         if intran:
-                            vptot=-getvbary(time_MJD[i])-getplanetv(time_MJD[i])+vsysshift
+                            vptot=-getvbary(time_MJD[i])+getplanetv(time_MJD[i])+vsysshift
                             
                             
                             nf_1, wl_1 = pyasl.dopplerShift(template['wl_(A)'].values, template['flux'].values, vptot, edgeHandling='firstlast', fillValue=None)              
@@ -442,7 +442,7 @@ class Instrument:
                         #print(intran)                    
                         dreturn=np.zeros_like(dtemp)
                         if intran:
-                            vptot=-getvbary(time_MJD[i])-getplanetv(time_MJD[i])+vsysshift
+                            vptot=-getvbary(time_MJD[i])+getplanetv(time_MJD[i])+vsysshift
                             
                             nf_1, wl_1 = pyasl.dopplerShift(template['wl_(A)'].values, template['flux'].values, vptot, edgeHandling='firstlast', fillValue=None)              
                             
