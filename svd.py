@@ -52,7 +52,7 @@ def intransit(mjd):
 
 class Instrument:
     def __init__(self,name):
-        self.name=name
+        
         if name=='GRACES':
             totalorders=33
             wl_low=4100.
@@ -129,6 +129,7 @@ class Instrument:
             wl_air_or_vac='vac'
             wlunit='AA'
             printsecs=['allwls']
+        self.name=name
 
         self.totalorders=totalorders
         self.npix=npix
@@ -214,7 +215,7 @@ class Instrument:
                 if fn.endswith('spec.fits') and fn.startswith('SDCK'):
 
                     code=fn[5:18]
-                    with fits.open('../data/'+date+'/'+fn[:-9]+'sn.fits') as f:
+                    with fits.open('../data/reduced/'+date+'/'+fn[:-9]+'sn.fits') as f:
                         hdr=f[0].header
                         date_begin=hdr['DATE-OBS'] #in UTC
                         date_end=hdr['DATE-END']
