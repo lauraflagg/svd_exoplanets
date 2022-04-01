@@ -139,7 +139,7 @@ class Instrument:
         self.long=long
         self.lat=lat
         self.height=height
-        self.leftedgecit=leftedgecut
+        self.leftedgecut=leftedgecut
         self.rightedgecut=rightedgecut
         self.orderstoplotinphase=orderstoplotinphase
         self.orderstoplotasresids=orderstoplotasresids
@@ -415,13 +415,13 @@ class Instrument:
                     else:
                         data[i]=dtemp
 
-        elif name=='IGRINS':
+        elif self.name=='IGRINS':
             for i,item in enumerate(all_fns):
                 #print(i,item)
 
 
 
-                with fits.open('../data/'+date+'/'+'SDCK_'+item+'.spec.fits') as f:
+                with fits.open('../data/reduced/'+date+'/'+'SDCK_'+item+'.spec.fits') as f:
                     dtemp=f[0].data
 
                     data[i,0:25,]=dtemp[0:25,:]
@@ -458,7 +458,7 @@ class Instrument:
 
 
 
-                with fits.open('../data/'+date+'/'+'SDCH_'+item+'.spec.fits') as f:
+                with fits.open('../data/reduced/'+date+'/'+'SDCH_'+item+'.spec.fits') as f:
                     wl[i,25:,]=(f[1].data)[:,:]
 
                     dtemp=f[0].data
@@ -477,8 +477,9 @@ class Instrument:
                         data[i,25:,]=dtemp[:,:]
             data=data[:,:,self.leftedgecut:-self.rightedgecut]
             uncs0=uncs0[:,:,self.leftedgecut:-self.rightedgecut]
-            wl=wl[:,self.leftedgecut:-self.rightedgecut]
-
+            print(wl.shape)
+            wl=wl[:,:,self.leftedgecut:-self.rightedgecut]
+            print(wl.shape)
         return wl,data,uncs0,time_MJD,intransit_list
 
 def dosmooth(d_byorder,dates,polyorder=5):
@@ -590,6 +591,7 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
                 print('creating new wl shift data')
                 arruse=data
                 wluse=wl
+                print(arruse.shape,wl_meds.shape,wl.shape)
                 blankarr=np.zeros((arruse.shape[0],arruse.shape[1],len(wl_meds[0])))
                 uncs1=np.zeros((arruse.shape[0],arruse.shape[1],len(wl_meds[0])))
                 for s, spec in enumerate(arruse):
