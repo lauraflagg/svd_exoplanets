@@ -475,6 +475,24 @@ class Instrument:
                         data[i,25:,]=dreturn[:,:]
                     else:
                         data[i,25:,]=dtemp[:,:]
+
+                with fits.open('../data/reduced/'+date+'/'+'SDCK_'+item+'.variance.fits') as f:
+                    dtemp=f[0].data
+
+
+
+                    uncs0[i,0:25,]=np.sqrt(dtemp[0:25,:])
+
+
+
+                with fits.open('../data/reduced/'+date+'/'+'SDCH_'+item+'.variance.fits') as f:
+
+
+                    dtemp=f[0].data
+
+                    uncs0[i,25:,]=np.sqrt(dtemp[:,:])
+
+
             data=data[:,:,self.leftedgecut:-self.rightedgecut]
             uncs0=uncs0[:,:,self.leftedgecut:-self.rightedgecut]
             print(wl.shape)
@@ -982,8 +1000,12 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
     else:
         for i,spec in enumerate(data_tog):
             #print(Vbary_tog[i])
+            
             nf_1, wl_1 = pyasl.dopplerShift(inst.wls, spec, Vbary_tog[i], edgeHandling='firstlast', fillValue=None)
             data_tog_final[i]=nf_1
+            if i==0:
+                print('orig',spec)
+                print('new',nf_1)
 
     if comps2>0:
         print('PCA-ing again')
