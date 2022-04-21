@@ -805,9 +805,9 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
 
 
         if byorder:
-            topick=[data_2d,time_MJD]
+            topick=[data_2d,time_MJD,uncs_2d]
         else:
-            topick=[data_1d,time_MJD]
+            topick=[data_1d,time_MJD,uncs_1d]
         if 1==2:
             if wlshift:
                 pickle.dump(topick,open(date+'_wlshift_iters'+str(iters)+'_comps'+str(comps)+'_sncut'+str(int(sncut))+'_dvcut'+str(int(dvcut))+'.pic','wb'),protocol=2)
@@ -828,6 +828,7 @@ def conc_data(date_list,returns):
             #data_tog=data_tog+returns[date][0]
             data_tog=np.concatenate((data_tog,(returns[date])[0]))
             mjd_tog=np.concatenate((mjd_tog,returns[date][1]))
+            uncs_tog=np.concatenate((uncs_tog,returns[date][2]))
 
 
         else:
@@ -835,11 +836,12 @@ def conc_data(date_list,returns):
 
             data_tog=returns[date][0]
             mjd_tog=returns[date][1]
+            uncs_tog=returns[date][2]
 
 
 
-    return data_tog,mjd_tog
-def print_section(inst,sec,secname,data_tog_final,mjd_tog,dates_used,filecode,savecsv=False):
+    return data_tog,mjd_tog,uncs_tog
+def print_section(inst,sec,secname,data_tog_final,uncs_tog_final,mjd_tog,dates_used,filecode,savecsv=False,oldpic=False):
 
 
     num=len(mjd_tog)
@@ -859,7 +861,18 @@ def print_section(inst,sec,secname,data_tog_final,mjd_tog,dates_used,filecode,sa
 
     if savecsv:
         backupandwrite(fn,d,np.transpose(toprint))
-    pickle.dump((d,np.transpose(toprint)),open(fn[:-3]+'pic','wb'),protocol=2)
+    if oldpic:
+        pickle.dump((d,np.transpose(toprint)),open(fn[:-3]+'pic','wb'),protocol=2)
+    data_out={}
+    data_out['dates']=mjd_tog
+    temp=data_tog_final[:,sec]
+    data_out['fluxes']=temp[:,0,:]
+    data_out['wls']=toprint[0]
+    temp=uncs_tog_final[:,sec]
+    data_out['uncs']=temp[:,0,:]
+    print('final shapes',data_tog_final.shape,uncs_tog_final.shape,data_out['uncs'].shape,data_out['wls'].shape)
+    pickle.dump(data_out,open(filecode+'_dict.pic','wb'),protocol=2)    
+    print(filecode+'_dict.pic')
 
 
 
@@ -871,7 +884,7 @@ def print_section(inst,sec,secname,data_tog_final,mjd_tog,dates_used,filecode,sa
 
 # In[ ]:
 
-def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','20160225','20160226','20160324'],iters=1,comps=4,comps2=0,do_new=True,wlshift=False,templatefn='',savecsv=False,plot=True,wv=True,sncut=570000.,dvcut=10.,savecode='',vsysshift=-10.,scale=1,normtwice=False,subtwice=False,sigcut=3.,initnorm=True,smooth=-1,byorder=False):
+def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','20160225','20160226','20160324'],iters=1,comps=4,comps2=0,do_new=True,wlshift=False,templatefn='',savecsv=False,plot=True,wv=True,sncut=570000.,dvcut=10.,savecode='',vsysshift=-10.,scale=1,normtwice=False,subtwice=False,sigcut=3.,initnorm=True,smooth=-1,byorder=False,douncs=False):
     mdl = importlib.import_module(target+'_pars')
 
     # is there an __all__?  if so respect it
@@ -939,9 +952,14 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
             bos='_byorder'
         else:
             bos=''
+            
+        if douncs:
+            dus='_withuncs'
+        else:
+            dus=''
 
 
-        filecode='../data/PCA_'+target+'_'+fss+'iters'+str(iters)+'_comps'+str(comps)+'_sncut'+str(int(sncut))+'_dvcut'+str(int(dvcut))+savecode+templatefn+vsstr+sstr+wbv+n2+s2+c2+scc+ins+sos+bos
+        filecode='../data/PCA_'+target+'_'+fss+'iters'+str(iters)+'_comps'+str(comps)+'_sncut'+str(int(sncut))+'_dvcut'+str(int(dvcut))+savecode+templatefn+vsstr+sstr+wbv+n2+s2+c2+scc+ins+sos+bos+dus
         print(filecode)
 
     inst=Instrument(instname)
@@ -974,7 +992,7 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
         pp.close()
 
 
-    data_tog,mjd_tog=conc_data(dates_used,returns)      
+    data_tog,mjd_tog,uncs_tog=conc_data(dates_used,returns)      
 
     Vbary_tog=np.zeros(len(mjd_tog))
     for i in range(len(mjd_tog)):
@@ -991,6 +1009,8 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
     secdefs['hewls']=np.where((inst.wls>6660) & (inst.wls<6700))
 
     data_tog_final=np.zeros_like(data_tog)
+    uncs_tog_final=np.zeros_like(uncs_tog)
+    print('shapes',inst.wls.shape,data_tog.shape)
     if byorder:
         for i,spec in enumerate(data_tog):
             for o,spec_o in enumerate(spec):
@@ -1002,11 +1022,15 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
             #print(Vbary_tog[i])
             
             nf_1, wl_1 = pyasl.dopplerShift(inst.wls, spec, Vbary_tog[i], edgeHandling='firstlast', fillValue=None)
+            if douncs:
+                nf_1, u_1=spectres.spectres(inst.wls,wl_1,spec,spec_errs=uncs_tog[i],verbose=False,fill=0)
+                uncs_tog_final[i]=u_1
+            #u_1=np.interp(inst.wls,wl_1,uncs_tog[i])
+            
             data_tog_final[i]=nf_1
-            if i==0:
-                print('orig',spec)
-                print('new',nf_1)
+            
 
+    print(inst.wls.shape,data_tog_final.shape)
     if comps2>0:
         print('PCA-ing again')
 
@@ -1049,7 +1073,7 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
     else:
     
         for item in inst.printsecs:
-            print_section(inst=inst,sec=secdefs[item],secname=str(item),data_tog_final=data_tog_final,mjd_tog=mjd_tog,dates_used=dates_used,filecode=filecode,savecsv=savecsv)
+            print_section(inst=inst,sec=secdefs[item],secname=str(item),data_tog_final=data_tog_final,uncs_tog_final=uncs_tog_final,mjd_tog=mjd_tog,dates_used=dates_used,filecode=filecode,savecsv=savecsv)
     
 
 
