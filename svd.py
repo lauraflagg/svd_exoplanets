@@ -70,6 +70,23 @@ class Instrument:
             wlunit='AA'
             wl_air_or_vac='air'
             printsecs=['allwls']
+        if name=='ESPRESSO':
+            totalorders=1
+            wl_low=1
+            wl_high=1
+            disp=0
+            lat=-24.62733
+            long=-70.40417
+            height=2635
+            npix=None
+            leftedgecut=0
+
+            rightedgecut=0
+            orderstoplotinphase=[15,11,6,3]
+            orderstoplotasresids=[11]
+            wlunit='AA'
+            wl_air_or_vac='vacuum'
+            printsecs=['allwls']
         if name=='McD_107in_echelle':
             totalorders=55
             wl_low=4100.
@@ -201,7 +218,22 @@ class Instrument:
             for fn in folds:
                 if fn.endswith('A.fits'):
 
-                    with fits.open('../data/'+date+'/'+fn) as f:
+                    with fits.open('../data/reduced/'+date+'/'+fn) as f:
+                        hdr=f[0].header        
+                        tmid=tmid=float(hdr['MJD-OBS'])+float(hdr['EXPTIME'])*.5/(60*60*24)
+
+                        snrs=hdr['HIERARCH CARACAL FOX SNR 35']
+
+                    if snrs>sncut: 
+                        fns.append(fn)
+                        ts.append(float(tmid))
+                        minszs.append(4096)
+                        
+        elif self.name=='ESPRESSO':
+            for fn in folds:
+                if fn.endswith('A.fits'):
+
+                    with fits.open('../data/reduced/'+date+'/'+fn) as f:
                         hdr=f[0].header        
                         tmid=tmid=float(hdr['MJD-OBS'])+float(hdr['EXPTIME'])*.5/(60*60*24)
 
@@ -306,6 +338,7 @@ class Instrument:
                     else:
                         tempxxx=1
         elif self.name=='HARPS':
+            #DOES NOT WORK
             for i,item in enumerate(all_fns):
                 #print(i,item)
 
@@ -381,7 +414,7 @@ class Instrument:
 
 
 
-                with fits.open('../data/'+date+'/'+item) as f:
+                with fits.open('../data/reduced/'+date+'/'+item) as f:
                     dtemp=f[1].data
                     uncs0[i]=f[2].data
 
@@ -392,7 +425,7 @@ class Instrument:
                     tmid=tmid=tmid=float(hdr['MJD-OBS'])+float(hdr['EXPTIME'])*.5/(60*60*24)#hdr['HIERARCH CARACAL HJD']-0.5
 
                     time_MJD[i]=float(tmid)
-                    vbarys[i]=hdr['HIERARCH CARACAL BERV']
+                    #vbarys[i]=hdr['HIERARCH CARACAL BERV']
                     intransit_list.append(intransit(time_MJD[i]))
 
 
@@ -885,6 +918,7 @@ def print_section(inst,sec,secname,data_tog_final,uncs_tog_final,mjd_tog,dates_u
 # In[ ]:
 
 def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','20160225','20160226','20160324'],iters=1,comps=4,comps2=0,do_new=True,wlshift=False,templatefn='',savecsv=False,plot=True,wv=True,sncut=570000.,dvcut=10.,savecode='',vsysshift=-10.,scale=1,normtwice=False,subtwice=False,sigcut=3.,initnorm=True,smooth=-1,byorder=False,douncs=False):
+    print(os.getcwd())
     mdl = importlib.import_module(target+'_pars')
 
     # is there an __all__?  if so respect it
