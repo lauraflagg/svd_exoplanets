@@ -278,6 +278,7 @@ class Instrument:
         time_MJD=np.zeros(len(all_fns))
         intransit_list=[]
         if self.name=='GRACES':
+            print('size:',self.sz)
             orders = list(np.arange(33)+23)
 
             for i,item in enumerate(all_fns):
@@ -306,8 +307,10 @@ class Instrument:
                             start=3
                         elif more<8:
                             start=4
-                        else:
+                        elif more<10:
                             start=5
+                        else:
+                            start=6
 
                         wl[i,loc]=wls_o[start:(start+self.sz)]*10
                         data[i,loc]=flux_o[start:(start+self.sz)]
@@ -619,7 +622,10 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
     if inst.npix!=None:
         inst.sz=inst.npix
     #inst.sz=sz    
-
+    if byorder and inst.name=='GRACES':
+        inst.sz=5902 #so byorder can be concatenated together
+    
+    print('pix per order:',inst.sz)
 
     print('starts at:',np.min(ts),'ends at',np.max(ts))
     dv=(getplanetv(np.max(ts))-getplanetv(np.min(ts)))
@@ -642,7 +648,7 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
                 print('creating new wl shift data')
                 arruse=data
                 wluse=wl
-                print(arruse.shape,wl_meds.shape,wl.shape)
+                print('shapes of arr,wl_meds, wl:',arruse.shape,wl_meds.shape,wl.shape)
                 blankarr=np.zeros((arruse.shape[0],arruse.shape[1],len(wl_meds[0])))
                 uncs1=np.zeros((arruse.shape[0],arruse.shape[1],len(wl_meds[0])))
                 for s, spec in enumerate(arruse):
@@ -767,7 +773,7 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
 
         data_1d=np.zeros((len(all_fns),len(inst.wls)))
         uncs_1d=np.zeros((len(all_fns),len(inst.wls)))
-        print(data_1d.shape)
+        print('shape of 1d data:',data_1d.shape)
 
     
 
