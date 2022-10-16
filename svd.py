@@ -313,7 +313,8 @@ class Instrument:
                             start=6
 
                         wl[i,loc]=wls_o[start:(start+self.sz)]*10
-                        data[i,loc]=flux_o[start:(start+self.sz)]
+                        dtemp=flux_o[start:(start+self.sz)]
+                        data[i,loc]=dtemp
                         uncs0[i,loc]=unc_o[start:(start+self.sz)]
 
 
@@ -323,20 +324,22 @@ class Instrument:
                     intransit_list.append(intransit(float(hdr['HJDUTC'])-2400000.5 ))
 
 
-                    if sim: #DOES NOT WORK YET FOR GRACES
+                    if sim: 
                         intran=intransit_list[i]
                         #print(intran)                    
                         dreturn=np.zeros_like(data[i])
                         if intran:
-                            vptot=-getvbary(time_MJD[i])-getplanetv(time_MJD[i])+vsysshift
+                            vptot=-self.getvbary(time_MJD[i],ra,dec)+getplanetv(time_MJD[i])+vsysshift
 
                             nf_1, wl_1 = pyasl.dopplerShift(template['wl_(A)'].values, template['flux'].values, vptot, edgeHandling='firstlast', fillValue=None)              
+                            wl_2=pyasl.vactoair2(wl_1)   
 
-
-                            for o,tempwls in enumerate(f[1].data):
-                                dreturn[o]=dtemp[o]*(1-spectres.spectres(tempwls,wl_1/1e4,template['flux'].values,verbose=False)*scale)
+                            for o,tempwls in enumerate(wl[i]):
+                                #print(wl_1)
+                                #print(tempwls)
+                                dreturn[o]=data[i,o].copy()*(1-spectres.spectres(tempwls,wl_2,template['flux'].values,verbose=False)*scale) #both wls in angstrons
                         else:
-                            dreturn=dtemp
+                            dreturn=data[i].copy()
                         data[i]=dreturn
                     else:
                         tempxxx=1
@@ -606,7 +609,7 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
 
     sim=False
     if templatefn!='':
-        template=pandas.read_csv('templates/'+templatefn)
+        template=pandas.read_csv('../../directdetectionprograms/templates/'+templatefn)
         sim=True
     else:
         template=''
@@ -630,17 +633,19 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
     print('starts at:',np.min(ts),'ends at',np.max(ts))
     dv=(getplanetv(np.max(ts))-getplanetv(np.min(ts)))
     print('num obs used=',len(all_fns),' |  dv=',dv,'km/s')
+    print('first vbary=',inst.getvbary(np.min(ts),ra,dec))
+    print('last vbary=',inst.getvbary(np.max(ts),ra,dec))
     #print(all_fns)
     vbarys=np.zeros(len(all_fns))
     if np.abs(dv)>dvcut:
 
         wl,data,uncs0,time_MJD,intransit_list=inst.getdata(all_fns=all_fns,date=date,sim=sim,vsysshift=vsysshift,template=template,scale=scale)
         data_temp=data[:,:,:]
-
+        #print('init uncs:',uncs0)
         wl_meds=np.median(wl,axis=0)      
         if wlshift:
             fff='shifted_data_'+inst.name+date+'_sncut'+str(int(sncut))+'.pic'
-            if os.path.exists(fff):
+            if os.path.exists(fff) and templatefn=='':
                 print('using saved wl shift data')
                 with open(fff, 'rb') as file:
                     data,uncs1=pickle.load(file)
@@ -654,9 +659,10 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
                 for s, spec in enumerate(arruse):
                     for o,f_o in enumerate(spec):
                         blankarr[s,o],uncs1[s,o]=spectres.spectres(wl_meds[o],wluse[s,o],f_o,spec_errs=uncs0[s,o],verbose=False,fill=1)
-                data=blankarr        
-                with open(fff, 'wb') as file:
-                    pickle.dump((data,uncs1),file,protocol=2)            
+                data=blankarr
+                if templatefn!='':
+                    with open(fff, 'wb') as file:
+                        pickle.dump((data,uncs1),file,protocol=2)            
 
 
         else:
@@ -671,6 +677,8 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
         uncs_byorder=np.nan_to_num(uncs1.transpose((1,2,0)))
         #wl_byorder=np.nan_to_num(wl.transpose((1,2,0)))
         intransit_arr=np.array(intransit_list)
+        
+        print('sample uncs:',uncs_byorder[5])
 
         #"blaze" correct
         if (iters>0 or smooth>-1) and initnorm!=False:
