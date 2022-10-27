@@ -33,7 +33,8 @@ def getphase(mjd):
 
 def getplanetv(mjd,e=0):
     if e>0.03:
-        return comb_xcor.planetrvshift(mjd,planet_pars2,day0,code='vcurve')       
+        #return comb_xcor.planetrvshift(mjd,planet_pars2,day0,code='vcurve')      
+        return comb_xcor.planetrvshift(mjd,radvel_planet_pars,day0,code='radvel')      
     return comb_xcor.planetrvshift(mjd,planet_pars,day0,code='sine')
 
 def intransit(mjd): 
@@ -675,10 +676,11 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
         #print(inst)
         data_byorder0=np.nan_to_num(data.transpose((1,2,0)))
         uncs_byorder=np.nan_to_num(uncs1.transpose((1,2,0)))
+        uncsper_byorder=data_byorder0/uncs_byorder
         #wl_byorder=np.nan_to_num(wl.transpose((1,2,0)))
         intransit_arr=np.array(intransit_list)
         
-        print('sample uncs:',uncs_byorder[5])
+        #print('sample uncs:',uncs_byorder[5])
 
         #"blaze" correct
         if (iters>0 or smooth>-1) and initnorm!=False:
@@ -785,7 +787,7 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
 
     
 
-
+        newerr_byorder=(arrused+1)*uncsper_byorder
         if byorder:
             olens=[]
             newos=[]
@@ -816,8 +818,9 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
                 if inst.wl_air_or_vac=='vac':
                     wlstouse=owls
                 elif inst.wl_air_or_vac=='air':
-                    wlstouse=pyasl.vactoair2(owls) 
-                d,u=spectres.spectres(wlstouse,wlused[o],arrused[o].transpose(),spec_errs=uncs_byorder[o].transpose(),fill=0,verbose=False)
+                    wlstouse=pyasl.vactoair2(owls)
+                newerr=(arrused[o]+1)*uncsper_byorder[o]
+                d,u=spectres.spectres(wlstouse,wlused[o],arrused[o].transpose(),spec_errs=newerr_byorder.transpose(),fill=0,verbose=False)
                 data_2d[:,o,:]=d
                 uncs_2d[:,o,:]=u
         else:
@@ -834,7 +837,7 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
 
             for o,o_data in enumerate(arrused):
                 #print(o_data.shape,wlused[o].shape)
-                o_data_1,u1d=spectres.spectres(wlstouse,wlused[o],o_data.transpose(),spec_errs=uncs_byorder[o].transpose(),fill=0,verbose=False)
+                o_data_1,u1d=spectres.spectres(wlstouse,wlused[o],o_data.transpose(),spec_errs=newerr_byorder[o].transpose(),fill=0,verbose=False)
     
                 #uncertainties and weighting the edges
                 wo1=uncs_1d
