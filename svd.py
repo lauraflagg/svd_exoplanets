@@ -316,7 +316,7 @@ class Instrument:
                         wl[i,loc]=wls_o[start:(start+self.sz)]*10
                         dtemp=flux_o[start:(start+self.sz)]
                         data[i,loc]=dtemp
-                        uncs0[i,loc]=unc_o[start:(start+self.sz)]
+                        uncs0[i,loc]=np.sqrt(unc_o[start:(start+self.sz)]) #read in the variance, convert to std
 
 
                     hdr=f[0].header
