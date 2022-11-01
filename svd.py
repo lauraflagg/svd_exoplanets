@@ -676,7 +676,7 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
         #print(inst)
         data_byorder0=np.nan_to_num(data.transpose((1,2,0)))
         uncs_byorder=np.nan_to_num(uncs1.transpose((1,2,0)))
-        uncsper_byorder=data_byorder0/uncs_byorder
+        uncsper_byorder=uncs_byorder/data_byorder0
         #wl_byorder=np.nan_to_num(wl.transpose((1,2,0)))
         intransit_arr=np.array(intransit_list)
         
@@ -788,6 +788,9 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
     
 
         newerr_byorder=(arrused+1)*uncsper_byorder
+        print('uncs per: ',np.mean(uncsper_byorder),np.median(uncsper_byorder))
+        print('uncs from uncsper: ',np.mean(newerr_byorder),np.median(newerr_byorder))
+        print('uncs raw: ',np.mean(uncs_byorder),np.median(uncs_byorder))
         if byorder:
             olens=[]
             newos=[]
@@ -820,7 +823,7 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
                 elif inst.wl_air_or_vac=='air':
                     wlstouse=pyasl.vactoair2(owls)
                 newerr=(arrused[o]+1)*uncsper_byorder[o]
-                d,u=spectres.spectres(wlstouse,wlused[o],arrused[o].transpose(),spec_errs=newerr_byorder.transpose(),fill=0,verbose=False)
+                d,u=spectres.spectres(wlstouse,wlused[o],arrused[o].transpose(),spec_errs=uncs_byorder[o].transpose(),fill=0,verbose=False)
                 data_2d[:,o,:]=d
                 uncs_2d[:,o,:]=u
         else:
