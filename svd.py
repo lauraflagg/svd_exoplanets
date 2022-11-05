@@ -9,6 +9,7 @@ from astropy.io import fits, ascii
 import os
 import spectres, argparse
 import importlib
+import h5py
 
 import sys
 sys.path.append('../../toimport')
@@ -87,6 +88,24 @@ class Instrument:
             orderstoplotasresids=[11]
             wlunit='AA'
             wl_air_or_vac='vacuum'
+            printsecs=['allwls']
+        if name=='UVES_Neale0':
+            print('111')
+            totalorders=1
+            wl_low=7200
+            wl_high=8650
+            disp=1.
+            lat=-24.62733
+            long=-70.40417
+            height=4096
+            npix=None
+            leftedgecut=55
+
+            rightedgecut=5
+            orderstoplotinphase=[-1,-2,7,6]
+            orderstoplotasresids=[-1,-2,7,6]
+            wlunit='AA'
+            wl_air_or_vac='air'
             printsecs=['allwls']
         if name=='McD_107in_echelle':
             totalorders=55
@@ -199,6 +218,22 @@ class Instrument:
                         fns.append(fn)
                         ts.append(float(tmid))  
                         minszs.append(np.min(test[1]))  
+        elif self.name=='UVES_Neale0': 
+            print(folds)
+            for fn in folds:
+                if fn.endswith('.h5'):
+                    with h5py.File('../data/reduced/'+date+'/'+fn,'r') as F:
+                        print('hiiii1')
+                        tmid = F['raw/{}/time'.format('redu')][()] -2400000.5                       
+                        #print(tmid,float(hdr['HJDUTC'])-2400000.5 )
+                        #print(getvbary(tmid,self),hdr['HRV'])
+                        snrs=1e6 #CHANGE WHEN SWITCHING OBJECT
+                        #print(tmid,snrs)
+
+                    if snrs>sncut:            
+                        fns.append(fn)
+                        ts=tmid
+                        minszs.append(4096)  
         elif self.name=='McD_107in_echelle':        
             for fn in folds:
                 if fn.endswith('.ech') and fn[:3]!='wid':        
@@ -330,7 +365,9 @@ class Instrument:
                         #print(intran)                    
                         dreturn=np.zeros_like(data[i])
                         if intran:
-                            vptot=-self.getvbary(time_MJD[i],ra,dec)+getplanetv(time_MJD[i])+vsysshift
+                            planetv=getplanetv(time_MJD[i],e=e)
+                            print(planetv)
+                            vptot=-self.getvbary(time_MJD[i],ra,dec)+planetv+vsysshift
 
                             nf_1, wl_1 = pyasl.dopplerShift(template['wl_(A)'].values, template['flux'].values, vptot, edgeHandling='firstlast', fillValue=None)              
                             wl_2=pyasl.vactoair2(wl_1)   
@@ -415,6 +452,24 @@ class Instrument:
                         data[i]=dtemp            
 
 
+        elif self.name=='UVES_Neale0':
+            for i,item in enumerate(all_fns):
+                chip='redu'
+                #print(i,item)
+                with h5py.File('../data/reduced/'+date+'/'+item,'r') as F:
+                    time_MJD = F['raw/{}/time'.format(chip)][()]   -2400000.5 
+                    print(time_MJD)
+                    wl = F['raw/{}/wl'.format(chip)][()][2:-1,self.leftedgecut:-self.rightedgecut]
+                    data = F['clean/{}/bspec'.format(chip)][()]
+                    uncs0 = F['clean/{}/bspec_err'.format(chip)][()]
+                    print(data.shape)
+                    data=data[:,2:-1,self.leftedgecut:-self.rightedgecut]
+                    data=np.nan_to_num(data)
+                    uncs0=uncs0[:,2:-1,self.leftedgecut:-self.rightedgecut]
+                    print(data.shape)
+                    for item in time_MJD:
+                        intransit_list.append(intransit(item))
+
         elif self.name=='Carmenes' or self.name=='CARMENES':
             for i,item in enumerate(all_fns):
                 #print(i,item)
@@ -454,6 +509,7 @@ class Instrument:
                         data[i]=dreturn
                     else:
                         data[i]=dtemp
+
 
         elif self.name=='IGRINS':
             for i,item in enumerate(all_fns):
@@ -592,6 +648,7 @@ def doPCA(d_byorder,comps=4,wlshift=False,sigcut=3.):
             #'''
             sig=np.std(A)
             med=np.median(A)
+            print('order: ',i,' sigma clip med and sig',med,sig)
             loc=np.where(A > sigcut*sig+med)
             A[loc]=0#*0.+20*sig
             loc=np.where(A < -sigcut*sig+med)
@@ -638,12 +695,16 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
     print('last vbary=',inst.getvbary(np.max(ts),ra,dec))
     #print(all_fns)
     vbarys=np.zeros(len(all_fns))
+    if inst.name=='UVES_Neale0':
+        vbarys=np.zeros(len(ts))
     if np.abs(dv)>dvcut:
 
         wl,data,uncs0,time_MJD,intransit_list=inst.getdata(all_fns=all_fns,date=date,sim=sim,vsysshift=vsysshift,template=template,scale=scale)
         data_temp=data[:,:,:]
         #print('init uncs:',uncs0)
-        wl_meds=np.median(wl,axis=0)      
+        wl_meds=np.median(wl,axis=0)
+        if inst.name=='UVES_Neale0':
+            wl_meds=wl
         if wlshift:
             fff='shifted_data_'+inst.name+date+'_sncut'+str(int(sncut))+'.pic'
             if os.path.exists(fff) and templatefn=='':
@@ -831,7 +892,8 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
             if inst.wl_air_or_vac=='vac':
                 wlstouse=inst.wls
             elif inst.wl_air_or_vac=='air':
-                wlstouse=pyasl.vactoair2(inst.wls)      
+                wlstouse=pyasl.vactoair2(inst.wls)   
+                print('shifting from air to vacuum wls')
                 #want to interpolate onto evenly spaced scale in vacuum wavelengths
                 #if the instrument outputs in vacuum then we can do this directly
                 #if not, we need to convert the desired wls to air.  When we interpolate
