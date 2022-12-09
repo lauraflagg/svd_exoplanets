@@ -53,7 +53,7 @@ def intransit(mjd):
 #    def __init__(self,mjds,):
 
 class Instrument:
-    def __init__(self,name):
+    def __init__(self,name,disp0=None):
         
         if name=='GRACES':
             totalorders=33
@@ -172,7 +172,10 @@ class Instrument:
         self.npix=npix
         self.wl_low=wl_low
         self.wl_high=wl_high
-        self.disp=disp
+        if disp0==None:
+            self.disp=disp
+        else:
+            self.disp=disp0
         self.long=long
         self.lat=lat
         self.height=height
@@ -465,6 +468,7 @@ class Instrument:
                     print(data.shape)
                     data=data[:,2:-1,self.leftedgecut:-self.rightedgecut]
                     data=np.nan_to_num(data)
+                    #data[data<0]=0
                     uncs0=uncs0[:,2:-1,self.leftedgecut:-self.rightedgecut]
                     print(data.shape)
                     for item in time_MJD:
@@ -648,7 +652,7 @@ def doPCA(d_byorder,comps=4,wlshift=False,sigcut=3.):
             #'''
             sig=np.std(A)
             med=np.median(A)
-            print('order: ',i,' sigma clip med and sig',med,sig)
+            #print('order: ',i,' sigma clip med and sig',med,sig)
             loc=np.where(A > sigcut*sig+med)
             A[loc]=0#*0.+20*sig
             loc=np.where(A < -sigcut*sig+med)
@@ -657,13 +661,14 @@ def doPCA(d_byorder,comps=4,wlshift=False,sigcut=3.):
             #
             data_arr_A[i,]=A
             if i==6:
-                print(np.std(A))
+                print('std in order 6 after SVD:',np.std(A))
     return data_arr_A
 
 
 # In[9]:
 
-def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=10,templatefn='',vsysshift=-10.,scale=1,wv=True,sigcut=3.,initnorm=True,smooth=-1,byorder=False):
+def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=10,templatefn='',vsysshift=-10.,scale=1,
+          wv=True,sigcut=3.,initnorm=True,smooth=-1,byorder=False,plot_order=None):
 
     sim=False
     if templatefn!='':
@@ -708,11 +713,12 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
         if wlshift:
             fff='shifted_data_'+inst.name+date+'_sncut'+str(int(sncut))+'.pic'
             if os.path.exists(fff) and templatefn=='':
-                print('using saved wl shift data')
+                print('using saved wl shift data at '+fff)
                 with open(fff, 'rb') as file:
                     data,uncs1=pickle.load(file)
             else:
-                print('creating new wl shift data')
+                print('creating new wl shift data in file '+fff)
+                print(templatefn)
                 arruse=data
                 wluse=wl
                 print('shapes of arr,wl_meds, wl:',arruse.shape,wl_meds.shape,wl.shape)
@@ -722,9 +728,11 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
                     for o,f_o in enumerate(spec):
                         blankarr[s,o],uncs1[s,o]=spectres.spectres(wl_meds[o],wluse[s,o],f_o,spec_errs=uncs0[s,o],verbose=False,fill=1)
                 data=blankarr
-                if templatefn!='':
-                    with open(fff, 'wb') as file:
-                        pickle.dump((data,uncs1),file,protocol=2)            
+                #if templatefn=='':???????
+                with open(fff, 'wb') as file:
+                    print('saving new wl shift data...')
+                    pickle.dump((data,uncs1),file,protocol=2)
+
 
 
         else:
@@ -781,13 +789,21 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
 
         if smooth>-1:
             data_byorder=dosmooth(data_byorder,time_MJD,smooth)
-
+        if inst.name=='UVES_Neale000':
+            data_byorder6=data_byorder[6].transpose()
+            print(data_byorder6.shape)
+            for item in data_byorder6:
+                print(np.mean(item),np.std(item),np.min(item),np.max(item))
+            data_byorder7=data_byorder[7].transpose()
+            print('order 7')
+            for item in data_byorder7:
+                print(np.mean(item),np.std(item),np.min(item),np.max(item))                
 
         for i in range(iters):
 
-            data_byorder=doPCA(data_byorder,comps, wlshift=wlshift,sigcut=sigcut)
+            data_byorder1=doPCA(data_byorder,comps, wlshift=wlshift,sigcut=sigcut)
 
-        data_arr=data_byorder    
+        data_arr=data_byorder1    
 
         if plot:
             aspect=np.average(inst.wls)/15.
@@ -826,16 +842,31 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
 
             pp.savefig(fig_all)
             plt.close()
+        
+        if plot_order!=None:
+            phases=np.array([getphase(item) for item in time_MJD])
+            phases[phases>.5]=phases[phases>.5]-1
+            cm='binary'
+            fig,axarr=plt.subplots(3,sharex=True,figsize=(8,5))
+            axarr[0].contourf(wl_meds[plot_order]/10.,phases,data_byorder0[plot_order].transpose(),levels=100,cmap=cm)
+            axarr[1].contourf(wl_meds[plot_order]/10.,phases,data_byorder[plot_order].transpose(),levels=100,cmap=cm)
+            axarr[2].contourf(wl_meds[plot_order]/10.,phases,data_arr[plot_order].transpose(),levels=100,cmap=cm)
+            axarr[2].set_xlabel('wavelength (nm)',fontsize=16)
+            axarr[1].set_ylabel('phase',fontsize=16)
+            fig.subplots_adjust(wspace=0, hspace=0)
+            fig.savefig('plot_order.png')
+                              
+                              
+                              
 
-        variances=np.std(data_byorder,axis=2)**2
+        variances=np.std(data_arr,axis=2)**2
         if wv:
-
             print(data_byorder.shape,variances.shape)
-            temp33=data_byorder.transpose((2,0,1))
+            temp33=data_arr.transpose((2,0,1))
             arrused=np.transpose(temp33/variances,(1,2,0))
             print(temp33.shape,data_arr.shape)
         else:
-            arrused=data_byorder
+            arrused=data_arr
 
 
         wlused=wl_meds
@@ -999,7 +1030,10 @@ def print_section(inst,sec,secname,data_tog_final,uncs_tog_final,mjd_tog,dates_u
 
 # In[ ]:
 
-def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','20160225','20160226','20160324'],iters=1,comps=4,comps2=0,do_new=True,wlshift=False,templatefn='',savecsv=False,plot=True,wv=True,sncut=570000.,dvcut=10.,savecode='',vsysshift=-10.,scale=1,normtwice=False,subtwice=False,sigcut=3.,initnorm=True,smooth=-1,byorder=False,douncs=False):
+def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','20160225','20160226','20160324'],iters=1,comps=4,
+         comps2=0,do_new=True,wlshift=False,templatefn='',savecsv=False,plot=True,wv=True,sncut=570000.,dvcut=10.,savecode='',
+         vsysshift=-10.,scale=1,normtwice=False,subtwice=False,sigcut=3.,initnorm=True,smooth=-1,byorder=False,
+         douncs=False,disp=None,plot_order=None):
     print(os.getcwd())
     mdl = importlib.import_module(target+'_pars')
 
@@ -1073,12 +1107,17 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
             dus='_withuncs'
         else:
             dus=''
+        
+        if disp==None:
+            ds=''
+        else:
+            ds='_'+str(disp)
 
 
-        filecode='../data/PCA_'+target+'_'+fss+'iters'+str(iters)+'_comps'+str(comps)+'_sncut'+str(int(sncut))+'_dvcut'+str(int(dvcut))+savecode+templatefn+vsstr+sstr+wbv+n2+s2+c2+scc+ins+sos+bos+dus
+        filecode='../data/PCA_'+target+'_'+fss+'iters'+str(iters)+'_comps'+str(comps)+'_sncut'+str(int(sncut))+'_dvcut'+str(int(dvcut))+savecode+templatefn+vsstr+sstr+wbv+n2+s2+c2+scc+ins+sos+bos+dus+ds
         print(filecode)
 
-    inst=Instrument(instname)
+    inst=Instrument(instname,disp0=disp)
     inst.wls=astro_lf.createwlscale(inst.disp,inst.wl_low,inst.wl_high)
     dates_used=[]
     returns={}
@@ -1091,7 +1130,9 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
 
     if do_new:
         for item in date_list:
-            temp_ret=doall(item,inst,iters=iters,comps=comps,wlshift=wlshift,plot=plot,sncut=sncut,dvcut=dvcut,templatefn=templatefn,vsysshift=vsysshift,scale=scale,wv=wv,initnorm=initnorm,smooth=smooth,byorder=byorder)
+            temp_ret=doall(item,inst,iters=iters,comps=comps,wlshift=wlshift,plot=plot,sncut=sncut,
+                           dvcut=dvcut,templatefn=templatefn,vsysshift=vsysshift,scale=scale,wv=wv,
+                           initnorm=initnorm,smooth=smooth,byorder=byorder,plot_order=plot_order)
             if temp_ret!=[]:
                 returns[item]=temp_ret
                 dates_used.append(item)
