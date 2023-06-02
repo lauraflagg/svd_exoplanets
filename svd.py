@@ -668,7 +668,7 @@ def doPCA(d_byorder,comps=4,wlshift=False,sigcut=3.):
 # In[9]:
 
 def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=10,templatefn='',vsysshift=-10.,scale=1,
-          wv=True,sigcut=3.,initnorm=True,smooth=-1,byorder=False,plot_order=None):
+          wv=True,sigcut=3.,initnorm=True,smooth=-1,byorder=False,plot_order=None,stds=None):
 
     sim=False
     if templatefn!='':
@@ -802,6 +802,27 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
         for i in range(iters):
 
             data_byorder1=doPCA(data_byorder,comps, wlshift=wlshift,sigcut=sigcut)
+        if stds!=None:
+            #print(np.mean(wl_meds))
+            stds_list=[]
+            for comp in range(20):
+                for o in range(len(wl_meds)):
+                    if np.min(wl_meds[o])<stds[0] and np.max(wl_meds[o])>stds[1]:
+                        temp=np.array(doPCA([data_byorder[o]],comp, wlshift=wlshift,sigcut=sigcut))
+                        #print(temp.shape)
+                        loc=np.where((wl_meds[o]>=stds[0]) & (wl_meds[o]<=stds[1]))
+                        tempdat=temp[0,loc]
+                        #print(temp.shape,tempdat.shape)
+                        stds_list.append(np.std(tempdat))
+            plt.figure(figsize=(12,5))
+            plt.scatter(np.arange(20), stds_list)
+            plt.xlabel('components')
+            plt.ylabel('std')
+            plt.show()
+            plt.close()
+                                         
+                        
+                                     
 
         data_arr=data_byorder1    
 
@@ -1033,7 +1054,7 @@ def print_section(inst,sec,secname,data_tog_final,uncs_tog_final,mjd_tog,dates_u
 def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','20160225','20160226','20160324'],iters=1,comps=4,
          comps2=0,do_new=True,wlshift=False,templatefn='',savecsv=False,plot=True,wv=True,sncut=570000.,dvcut=10.,savecode='',
          vsysshift=-10.,scale=1,normtwice=False,subtwice=False,sigcut=3.,initnorm=True,smooth=-1,byorder=False,
-         douncs=False,disp=None,plot_order=None):
+         douncs=False,disp=None,plot_order=None,stds=None):
     print(os.getcwd())
     mdl = importlib.import_module(target+'_pars')
 
@@ -1132,7 +1153,7 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
         for item in date_list:
             temp_ret=doall(item,inst,iters=iters,comps=comps,wlshift=wlshift,plot=plot,sncut=sncut,
                            dvcut=dvcut,templatefn=templatefn,vsysshift=vsysshift,scale=scale,wv=wv,
-                           initnorm=initnorm,smooth=smooth,byorder=byorder,plot_order=plot_order)
+                           initnorm=initnorm,smooth=smooth,byorder=byorder,plot_order=plot_order,stds=stds)
             if temp_ret!=[]:
                 returns[item]=temp_ret
                 dates_used.append(item)
