@@ -667,8 +667,8 @@ def doPCA(d_byorder,comps=4,wlshift=False,sigcut=3.):
 
 # In[9]:
 
-def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=10,templatefn='',vsysshift=-10.,scale=1,
-          wv=True,sigcut=3.,initnorm=True,smooth=-1,byorder=False,plot_order=None,stds=None):
+def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=10,templatefn='',vsysshift=0,scale=1,
+          wv=True,sigcut=3.,initnorm=True,smooth=-1,byorder=False,plot_order=None,stds=None,magnitudes=False):
 
     sim=False
     if templatefn!='':
@@ -704,20 +704,42 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
         vbarys=np.zeros(len(ts))
     if np.abs(dv)>dvcut:
 
-        wl,data,uncs0,time_MJD,intransit_list=inst.getdata(all_fns=all_fns,date=date,sim=sim,vsysshift=vsysshift,template=template,scale=scale)
-        data_temp=data[:,:,:]
-        #print('init uncs:',uncs0)
-        wl_meds=np.median(wl,axis=0)
+                
+
+
+
         if inst.name=='UVES_Neale0':
+            wl,data,uncs0,time_MJD,intransit_list=inst.getdata(all_fns=all_fns,date=date,sim=sim,vsysshift=vsysshift,template=template,scale=scale)
+            data_temp=data[:,:,:]
+            #print('init uncs:',uncs0)
+            wl_meds=np.median(wl,axis=0)            
             wl_meds=wl
         if wlshift:
             fff='shifted_data_'+inst.name+date+'_sncut'+str(int(sncut))+'.pic'
-            if os.path.exists(fff) and templatefn=='':
+            if sim:
+                fff='sim_data_'+inst.name+date+'_vsysshift'+str(int(vsysshift))+'_scale'+str(int(scale))+templatefn+'.pic'
+            if os.path.exists(fff):
                 print('using saved wl shift data at '+fff)
-                with open(fff, 'rb') as file:
-                    data,uncs1=pickle.load(file)
+                if sim:
+                    with open(fff, 'rb') as file:
+                        wl_meds,data,uncs1,time_MJD,intransit_list=pickle.load(file)
+
+                else:
+                    wl,data,uncs0,time_MJD,intransit_list=inst.getdata(all_fns=all_fns,date=date,sim=sim,vsysshift=vsysshift,template=template,scale=scale)
+                    wl_meds=np.median(wl,axis=0)
+                    with open(fff, 'rb') as file:
+                        data,uncs1=pickle.load(file)
             else:
-                print('creating new wl shift data in file '+fff)
+                if sim:
+                    print('creating new simulated and wl shift data in file '+fff)
+                else:
+                    print('creating new wl shift data in file '+fff)
+                wl,data,uncs0,time_MJD,intransit_list=inst.getdata(all_fns=all_fns,date=date,sim=sim,vsysshift=vsysshift,template=template,scale=scale)
+                data_temp=data[:,:,:]
+                #print('init uncs:',uncs0)
+                wl_meds=np.median(wl,axis=0)                
+                
+
                 print(templatefn)
                 arruse=data
                 wluse=wl
@@ -731,9 +753,10 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
                 #if templatefn=='':???????
                 with open(fff, 'wb') as file:
                     print('saving new wl shift data...')
-                    pickle.dump((data,uncs1),file,protocol=2)
-
-
+                    if sim:
+                        pickle.dump((wl_meds,data,uncs1,time_MJD,intransit_list),file,protocol=2)
+                    else:
+                        pickle.dump((data,uncs1),file,protocol=2)
 
         else:
 
@@ -800,8 +823,15 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
                 print(np.mean(item),np.std(item),np.min(item),np.max(item))                
 
         for i in range(iters):
-
-            data_byorder1=doPCA(data_byorder,comps, wlshift=wlshift,sigcut=sigcut)
+            if magnitudes:
+                print('doing PCS in magnitudes')
+                loc=np.where(data_byorder<=0)
+                print(np.where(data_byorder<=0))
+                temp=data_byorder.copy()
+                temp[loc]=1e-20
+                data_byorder1=10**doPCA(np.log10(temp),comps, wlshift=wlshift,sigcut=sigcut)-1.
+            else:
+                data_byorder1=doPCA(data_byorder,comps, wlshift=wlshift,sigcut=sigcut)
         if stds!=None:
             #print(np.mean(wl_meds))
             stds_list=[]
@@ -1024,7 +1054,7 @@ def print_section(inst,sec,secname,data_tog_final,uncs_tog_final,mjd_tog,dates_u
 
 
     fn=filecode+'_tog_'+secname+'.csv'
-    print(fn[:-3]+'pic')
+    #print(fn[:-3]+'pic')
 
     if savecsv:
         backupandwrite(fn,d,np.transpose(toprint))
@@ -1054,10 +1084,13 @@ def print_section(inst,sec,secname,data_tog_final,uncs_tog_final,mjd_tog,dates_u
 def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','20160225','20160226','20160324'],iters=1,comps=4,
          comps2=0,do_new=True,wlshift=False,templatefn='',savecsv=False,plot=True,wv=True,sncut=570000.,dvcut=10.,savecode='',
          vsysshift=-10.,scale=1,normtwice=False,subtwice=False,sigcut=3.,initnorm=True,smooth=-1,byorder=False,
-         douncs=False,disp=None,plot_order=None,stds=None):
+         douncs=False,disp=None,plot_order=None,stds=None,magnitudes=False,parsfile='default'):
     print(os.getcwd())
-    mdl = importlib.import_module(target+'_pars')
-
+    
+    if parsfile=='default':
+        mdl = importlib.import_module(target+'_pars')
+    else:
+        mdl = importlib.import_module(parsfile)
     # is there an __all__?  if so respect it
     if "__all__" in mdl.__dict__:
         names = mdl.__dict__["__all__"]
@@ -1071,6 +1104,11 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
 
     #define file code for outpurs
     if 1==1:
+        
+        if parsfile=='default':
+            pfs=''
+        else:
+            pfs='_parsfile'+parsfile
 
         if smooth>-1:
             sos='_smoothorder'+str(smooth)
@@ -1133,9 +1171,14 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
             ds=''
         else:
             ds='_'+str(disp)
+            
+        if magnitudes:
+            ms='_mags'
+        else:
+            ms=''
 
 
-        filecode='../data/PCA_'+target+'_'+fss+'iters'+str(iters)+'_comps'+str(comps)+'_sncut'+str(int(sncut))+'_dvcut'+str(int(dvcut))+savecode+templatefn+vsstr+sstr+wbv+n2+s2+c2+scc+ins+sos+bos+dus+ds
+        filecode='../data/PCA_'+target+'_'+fss+'iters'+str(iters)+'_comps'+str(comps)+'_sncut'+str(int(sncut))+'_dvcut'+str(int(dvcut))+savecode+templatefn.replace('/','')+vsstr+sstr+wbv+n2+s2+c2+scc+ins+sos+bos+dus+ds+ms+pfs
         print(filecode)
 
     inst=Instrument(instname,disp0=disp)
@@ -1153,7 +1196,7 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
         for item in date_list:
             temp_ret=doall(item,inst,iters=iters,comps=comps,wlshift=wlshift,plot=plot,sncut=sncut,
                            dvcut=dvcut,templatefn=templatefn,vsysshift=vsysshift,scale=scale,wv=wv,
-                           initnorm=initnorm,smooth=smooth,byorder=byorder,plot_order=plot_order,stds=stds)
+                           initnorm=initnorm,smooth=smooth,byorder=byorder,plot_order=plot_order,stds=stds,magnitudes=magnitudes)
             if temp_ret!=[]:
                 returns[item]=temp_ret
                 dates_used.append(item)
@@ -1211,8 +1254,11 @@ def main(target,instname='GRACES', date_list=['20160202','20160222','20160224','
     print(inst.wls.shape,data_tog_final.shape)
     if comps2>0:
         print('PCA-ing again')
-
-        data_tog_final0=doPCA([np.nan_to_num(data_tog_final,neginf=0,posinf=0)],comps=comps2)
+        if magnitudes:
+            data_tog_final0=10**(doPCA([np.nan_to_num(np.log10(data_tog_final+1),neginf=0,posinf=0)],comps=comps2))-1.
+        else:
+            data_tog_final0=doPCA([np.nan_to_num(data_tog_final,neginf=0,posinf=0)],comps=comps2)
+        
         data_tog_final=data_tog_final0[0]
         print(data_tog_final.shape,data_tog_final0.shape)
 
