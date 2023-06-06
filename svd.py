@@ -717,7 +717,8 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
         if wlshift:
             fff='shifted_data_'+inst.name+date+'_sncut'+str(int(sncut))+'.pic'
             if sim:
-                fff='sim_data_'+inst.name+date+'_vsysshift'+str(int(vsysshift))+'_scale'+str(int(scale))+templatefn+'.pic'
+                fff='sim_data_'+inst.name+date+'_vsysshift'+str(int(vsysshift))+'_scale'+str(int(scale))+templatefn.replace('/','')+'.pic'
+                
             if os.path.exists(fff):
                 print('using saved wl shift data at '+fff)
                 if sim:
