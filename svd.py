@@ -461,7 +461,7 @@ class Instrument:
                 #print(i,item)
                 with h5py.File('../data/reduced/'+date+'/'+item,'r') as F:
                     time_MJD = F['raw/{}/time'.format(chip)][()]   -2400000.5 
-                    print(time_MJD)
+                    #print(time_MJD)
                     wl = F['raw/{}/wl'.format(chip)][()][2:-1,self.leftedgecut:-self.rightedgecut]
                     data = F['clean/{}/bspec'.format(chip)][()]
                     uncs0 = F['clean/{}/bspec_err'.format(chip)][()]
@@ -471,8 +471,30 @@ class Instrument:
                     #data[data<0]=0
                     uncs0=uncs0[:,2:-1,self.leftedgecut:-self.rightedgecut]
                     print(data.shape)
-                    for item in time_MJD:
-                        intransit_list.append(intransit(item))
+                    print('wl shape',wl.shape)
+                    for ii,item in enumerate(time_MJD):
+                        intran=intransit(item)
+                        print('in transit?',intran, item)
+                        intransit_list.append(intran)
+                        if sim: 
+
+                            #print(intran)                    
+                            dreturn=np.zeros_like(data[ii])
+                            if intran:
+                                planetv=getplanetv(time_MJD[ii],e=e)
+                                print(planetv)
+                                vptot=-self.getvbary(time_MJD[ii],ra,dec)+planetv+vsysshift
+    
+                                nf_1, wl_1 = pyasl.dopplerShift(template['wl_(A)'].values, template['flux'].values, vptot, edgeHandling='firstlast', fillValue=None)              
+                                wl_2=pyasl.vactoair2(wl_1)   
+    
+                                for o,tempwls in enumerate(wl):
+                                    #print(wl_1)
+
+                                    dreturn[o]=data[ii,o].copy()*(1-spectres.spectres(tempwls,wl_2,template['flux'].values,verbose=False)*scale) #both wls in angstrons
+                            else:
+                                dreturn=data[ii].copy()
+                            data[ii]=dreturn
 
         elif self.name=='Carmenes' or self.name=='CARMENES':
             for i,item in enumerate(all_fns):
@@ -704,16 +726,32 @@ def doall(date,inst,iters=2,comps=4,wlshift=False,plot=True,sncut=570000,dvcut=1
         vbarys=np.zeros(len(ts))
     if np.abs(dv)>dvcut:
 
-                
-
-
 
         if inst.name=='UVES_Neale0':
-            wl,data,uncs0,time_MJD,intransit_list=inst.getdata(all_fns=all_fns,date=date,sim=sim,vsysshift=vsysshift,template=template,scale=scale)
-            data_temp=data[:,:,:]
-            #print('init uncs:',uncs0)
-            wl_meds=np.median(wl,axis=0)            
-            wl_meds=wl
+            if sim:
+                fff='sim_data_'+inst.name+date+'_vsysshift'+str(int(vsysshift))+'_scale'+str(int(scale))+templatefn.replace('/','')+'.pic'
+                if os.path.exists(fff):
+                    print('using saved wl shift data at '+fff)
+                    with open(fff, 'rb') as file:
+                        wl_meds,data,uncs0,time_MJD,intransit_list=pickle.load(file)
+                else:
+                    print('creating new simulated data in file '+fff)
+
+                    wl,data,uncs0,time_MJD,intransit_list=inst.getdata(all_fns=all_fns,date=date,sim=sim,vsysshift=vsysshift,template=template,scale=scale)
+                    data_temp=data[:,:,:]
+                    #print('init uncs:',uncs0)
+                    wl_meds=np.median(wl,axis=0)
+                    wl_meds=wl
+                    with open(fff, 'wb') as file:
+                        print('saving new wl shift data...')
+                        pickle.dump((wl_meds,data,uncs0,time_MJD,intransit_list),file,protocol=2)                    
+
+            else:
+                wl,data,uncs0,time_MJD,intransit_list=inst.getdata(all_fns=all_fns,date=date,sim=sim,vsysshift=vsysshift,template=template,scale=scale)
+                data_temp=data[:,:,:]
+                #print('init uncs:',uncs0)
+                wl_meds=np.median(wl,axis=0)            
+                wl_meds=wl
         if wlshift:
             fff='shifted_data_'+inst.name+date+'_sncut'+str(int(sncut))+'.pic'
             if sim:
